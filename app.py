@@ -15,4 +15,4 @@ def budget():
     return f"You are planning a {duration}-day trip to {destination} with a budget of ${budget}."
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
