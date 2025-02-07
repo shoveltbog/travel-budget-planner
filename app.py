@@ -1,6 +1,45 @@
+import requests
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
+
+# Weatherstack API Function for weather data
+def get_weather(city):
+    API_KEY = "eb657c48977bac9aba721e9199b777b7"  # Weatherstack API key
+    BASE_URL = "http://api.weatherstack.com/current"  # The API endpoint
+    
+    # Define the parameters we need to send
+    params = {
+        "access_key": API_KEY,
+        "query": city
+    }
+
+    # Send a request to the API
+    response = requests.get(BASE_URL, params=params)
+    
+    # Convert the response into JSON format (structured data)
+    data = response.json()
+
+    # Handle API error
+    if "error" in response:
+        print(f"API Error: {response['error']['info']}")
+        return None
+
+    # Check if the API request was successful
+    if "current" in data and "location" in data:
+        return {
+            "city": data["location"]["name"],
+            "country": data["location"]["country"],
+            "region": data["location"]["region"],
+            "local_time": data["location"]["localtime"],
+            "temperature": data["current"]["temperature"],
+            "feels_like": data["current"]["feelslike"],
+            "humidity": data["current"]["humidity"],
+            "precipitation": data["current"]["precip"],
+            "uv_index": data["current"]["uv_index"]
+        }
+    else:
+        return None  # If the API fails, return None
 
 @app.route('/')
 def home():
@@ -28,7 +67,21 @@ def budget():
     except ValueError:
         return "Error: Invalid number input."
 
-    return f"You are planning a {duration}-day trip to {destination} with a budget of ${budget}."
+    # Fetch weather data from weatherstack API
+    weather = get_weather(destination)
+
+    if weather:
+        return (f"You are planning a {duration}-day trip to {destination} with a budget of ${budget}.\n"
+                f"📍 Location: {weather['city']}, {weather['region']}, {weather['country']}\n"
+                f"🕒 Local Time: {weather['local_time']}\n"
+                f"🌡 Temperature: {weather['temperature']}°C (Feels like {weather['feels_like']}°C)\n"
+                f"💧 Humidity: {weather['humidity']}%\n"
+                f"🌧 Precipitation: {weather['precipitation']} mm\n"
+                f"☀ UV Index: {weather['uv_index']}\n"
+            )
+
+    else:
+        return f"You are planning a {duration}-day trip to {destination} with a budget of ${budget}. Weather data unavailable."
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
