@@ -37,7 +37,7 @@ def get_weather(city):
     else:
         return None
 
-# Function to Get Currency from Country Name
+# Function to Get Currency code & symbol from Country Name from RestCountries API
 def get_currency_from_country(country_name):
     """Fetch the currency code dynamically for a given country."""
     url = f"https://restcountries.com/v3.1/name/{country_name}"
@@ -46,21 +46,25 @@ def get_currency_from_country(country_name):
     if response.status_code == 200:
         data = response.json()
         if isinstance(data, list) and len(data) > 0:
-            return list(data[0]["currencies"].keys())[0]
-    return "USD"
+            currencies = data[0].get("currencies", {})
+            if currencies:
+                currency_code = list(currencies.keys())[0]  # Extract currency code (e.g., EUR)
+                currency_symbol = currencies[currency_code].get("symbol", currency_code)  # Extract symbol or fallback to code
+                return currency_code, currency_symbol
+    return "USD", "$"  # Default to USD if lookup fails
 
 # Exchange Rate API Function
 def get_exchange_rate(base_currency="AUD", country=None):
-    """Fetch the exchange rate dynamically for a given country."""
-    target_currency = get_currency_from_country(country) if country else "USD"
+    """Fetch the exchange rate dynamically based on the user's destination country."""
+    target_currency, target_symbol = get_currency_from_country(country) if country else ("USD", "$")
 
     url = f"https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/{base_currency}"
     response = requests.get(url)
     data = response.json()
 
     if "conversion_rates" in data:
-        return data["conversion_rates"].get(target_currency, None), target_currency
-    return None, target_currency
+        return data["conversion_rates"].get(target_currency, None), target_currency, target_symbol
+    return None, target_currency, target_symbol
 
 # Flask Routes
 @app.route('/')
@@ -82,10 +86,10 @@ def budget():
         budget = float(budget)
         duration = int(duration)
 
-        if budget < 100:
-            return "Error: Budget must be at least $100."
-        if duration < 1 or duration > 365:
-            return "Error: Trip duration must be between 1 and 365 days."
+        if budget < 50:
+            return "Error: Budget must be at least $50."
+        if duration < 1 or duration > 730:
+            return "Error: Trip duration must be between 1 and 730 days."
 
     except ValueError:
         return "Error: Invalid number input."
@@ -97,13 +101,20 @@ def budget():
     country = weather["country"] if weather else None
 
     # Fetch exchange rate dynamically
-    exchange_rate, target_currency = get_exchange_rate("AUD", country)
+    exchange_rate, target_currency, target_symbol = get_exchange_rate("AUD", country)
+
 
     # Generate Response
     if exchange_rate:
+        # **Calculate Daily Budget**
+        daily_budget_aud = round(budget / duration, 2)
         converted_budget = round(budget * exchange_rate, 2)
-        return (f"You are planning a {duration}-day trip to {destination} with a budget of AUD ${budget}.\n"
-                f"This is equivalent to {target_currency} ${converted_budget}.\n"
+        daily_budget_converted = round(converted_budget / duration, 2)
+        formatted_budget = f"({target_currency}) {target_symbol}{converted_budget}"
+        formatted_daily_budget = f" ({target_currency}) {target_symbol}{daily_budget_converted}"
+        return (f"You are planning a {duration}-day trip to {destination} with a budget of (AUD) A${budget}.\n"
+                f"This is equivalent to {formatted_budget}.\n"
+                f"Daily Budget: (AUD) A${daily_budget_aud} per day or {formatted_daily_budget} per day\n"
                 f"📍 Location: {weather['city']}, {weather['region']}, {weather['country']}\n"
                 f"🕒 Local Time: {weather['local_time']}\n"
                 f"🌡 Temperature: {weather['temperature']}°C (Feels like {weather['feels_like']}°C)\n"
@@ -111,7 +122,9 @@ def budget():
                 f"🌧 Precipitation: {weather['precipitation']} mm\n"
                 f"☀ UV Index: {weather['uv_index']}\n")
     else:
-        return f"You are planning a {duration}-day trip to {destination} with a budget of AUD ${budget}. Unable to fetch exchange rates."
+        return (f"You are planning a {duration}-day trip to {destination} with a    budget of A$ (AUD) {budget}.\n"
+                f"Unable to fetch exchange rates.\n"
+                f"Daily Budget: A$ (AUD) {daily_budget_aud} per day.")
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
