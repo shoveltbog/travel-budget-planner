@@ -1,16 +1,17 @@
 import requests
 from flask import Flask, render_template, request
+from config import EXCHANGE_RATE_API_KEY, WEATHERSTACK_API_KEY
+
 
 app = Flask(__name__)
 
 # Weatherstack API Function for weather data
 def get_weather(city):
-    API_KEY = "eb657c48977bac9aba721e9199b777b7"  # Weatherstack API key
     BASE_URL = "http://api.weatherstack.com/current"  # The API endpoint
     
     # Define the parameters we need to send
     params = {
-        "access_key": API_KEY,
+        "access_key": WEATHERSTACK_API_KEY, # Weatherstack API key
         "query": city
     }
 
