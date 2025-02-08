@@ -1,6 +1,7 @@
 import requests
 from flask import Flask, render_template, request
 from config import EXCHANGE_RATE_API_KEY, WEATHERSTACK_API_KEY
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -66,6 +67,26 @@ def get_exchange_rate(base_currency="AUD", country=None):
         return data["conversion_rates"].get(target_currency, None), target_currency, target_symbol
     return None, target_currency, target_symbol
 
+# Load cost of living dataset
+cost_of_living_df = pd.read_csv("cost-of-living_v2.csv")
+
+def get_cost_of_living(city):
+    """Fetch cost of living data from the dataset based on the city."""
+    # Convert city names to lowercase for matching
+    city = city.lower()
+    cost_data = cost_of_living_df[cost_of_living_df["city"].str.lower() == city]
+
+    if cost_data.empty:
+        return None  # No matching city found
+    
+    # Convert row to dictionary and exclude city and country
+    cost_data_dict = cost_data.iloc[0].to_dict()
+    # Remove city and country
+    cost_data_dict.pop('city', None)
+    cost_data_dict.pop('country', None)
+    
+    return cost_data_dict
+
 # Flask Routes
 @app.route('/')
 def home():
@@ -103,6 +124,17 @@ def budget():
     # Fetch exchange rate dynamically
     exchange_rate, target_currency, target_symbol = get_exchange_rate("AUD", country)
 
+    # Fetch cost of living data for destination
+    cost_of_living = get_cost_of_living(destination)
+
+    if cost_of_living:
+        cost_summary = "\n".join([f"{key}: {value}" for key, value in cost_of_living.items()])
+    else:
+        cost_summary = "Cost of living data unavailable for this destination."
+
+    print("Cost of Living:", cost_of_living)
+    print("Exchange Rate:", exchange_rate)
+    print("Weather:", weather)
 
     # Generate Response
     if exchange_rate:
@@ -112,19 +144,25 @@ def budget():
         daily_budget_converted = round(converted_budget / duration, 2)
         formatted_budget = f"({target_currency}) {target_symbol}{converted_budget}"
         formatted_daily_budget = f" ({target_currency}) {target_symbol}{daily_budget_converted}"
-        return (f"You are planning a {duration}-day trip to {destination} with a budget of (AUD) A${budget}.\n"
-                f"This is equivalent to {formatted_budget}.\n"
-                f"Daily Budget: (AUD) A${daily_budget_aud} per day or {formatted_daily_budget} per day\n"
-                f"📍 Location: {weather['city']}, {weather['region']}, {weather['country']}\n"
-                f"🕒 Local Time: {weather['local_time']}\n"
-                f"🌡 Temperature: {weather['temperature']}°C (Feels like {weather['feels_like']}°C)\n"
-                f"💧 Humidity: {weather['humidity']}%\n"
-                f"🌧 Precipitation: {weather['precipitation']} mm\n"
-                f"☀ UV Index: {weather['uv_index']}\n")
     else:
-        return (f"You are planning a {duration}-day trip to {destination} with a    budget of A$ (AUD) {budget}.\n"
-                f"Unable to fetch exchange rates.\n"
-                f"Daily Budget: A$ (AUD) {daily_budget_aud} per day.")
+        converted_budget = None
+        
+    # Construct response message
+    response_message = (
+        f"You are planning a {duration}-day trip to {destination} with a budget of (AUD) A${budget}.\n"
+        f"This is equivalent to {formatted_budget}.\n"
+        f"Daily Budget: (AUD) A${daily_budget_aud} per day or {formatted_daily_budget} per day\n"
+        f"📍 Location: {weather['city']}, {weather['region']}, {weather['country']}\n"
+        f"🕒 Local Time: {weather['local_time']}\n"
+        f"🌡 Temperature: {weather['temperature']}°C (Feels like {weather['feels_like']}°C)\n"
+        f"💧 Humidity: {weather['humidity']}%\n"
+        f"🌧 Precipitation: {weather['precipitation']} mm\n"
+        f"☀ UV Index: {weather['uv_index']}\n"
+        f"\nCost of Living:\n"
+        f"{cost_summary}"
+        )
+
+    return response_message
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
